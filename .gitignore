@@ -1,0 +1,12 @@
+.venv/
+.env
+
+data/raw/
+data/staging/
+data/silver/
+
+__pycache__/
+*.pyc
+
+
+.idea/
