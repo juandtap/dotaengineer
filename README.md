@@ -351,3 +351,16 @@ dotaengineer <match_id>
 instead of having the match ID hardcoded inside each script.
 
 After that, the project can start processing multiple professional matches and expand the Silver layer with datasets for matches, drafts, objectives, teamfights, wards, and eventually player movement.
+
+
+**Notes**
+
+The value `lane_efficiency_pct` can be higher than 100. This could mean that `gem-dota` calculates it differently, or that the metric is not limited to the 0–100 range. The meaning of this metric still needs to be investigated.
+
+**More notes**
+
+or questions ? 
+
+Wny teams rely on tiny hard carry ?
+Lone Droid is broken ? In the second match for Team Spirit vs Iron Wing lone druid was ignored despite of the first match was uncontrolable
+Radiant teams has advantage ? Nigma won their last match as dire. 
