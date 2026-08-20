@@ -1,127 +1,12 @@
-# from pathlib import Path
-
-# import gem
-# import pandas as pd
-
-# REPLAY_PATH = Path("data/staging/replays/8943466067.dem")
-
-
-# def main() -> None:
-#     print(f"Parsing replay: {REPLAY_PATH}")
-
-#     match = gem.parse(REPLAY_PATH)
-
-#     print(f"\nReturned type: {type(match)}")
-#     print("\nAvailable attributes:")
-#     print(dir(match))
-
-#     print(f"Players found: {len(match.players)}")
-
-#     first_player = match.players[0]
-
-#     print(f"\nFirst player type: {type(first_player)}")
-#     print("\nFirst player attributes:")
-#     print(dir(first_player))
-
-
-# if __name__ == "__main__":
-#     main()
-
-
-
-
-# def main() -> None:
-#     print(f"Parsing replay: {REPLAY_PATH}")
-
-#     match = gem.parse(REPLAY_PATH)
-
-#     print(f"\nMatch ID: {match.match_id}")
-#     print(f"Players found: {len(match.players)}")
-
-#     first_player = match.players[0]
-
-#     print("\n--- First player sample ---")
-
-#     fields = [
-#         "player_name",
-#         "player_id",
-#         "account_id",
-#         "team",
-#         "is_radiant",
-#         "hero_id",
-#         "hero_name",
-#         "kills",
-#         "deaths",
-#         "assists",
-#         "gold_per_min",
-#         "xp_per_min",
-#         "net_worth",
-#         "lane_role",
-#         "lane_efficiency_pct",
-#         "teamfight_participation",
-#     ]
-
-#     for field in fields:
-#         value = getattr(first_player, field)
-
-#         print(
-#             f"{field}: "
-#             f"{value!r} "
-#             f"[{type(value).__name__}]"
-#         )
-
-
-# def build_player_match_dataframe(match) -> pd.DataFrame:
-#     rows = []
-
-#     for player in match.players:
-#         rows.append(
-#             {
-#                 "match_id": match.match_id,
-#                 "player_id": player.player_id,
-#                 "account_id": player.account_id,
-#                 "player_name": player.player_name,
-#                 "team": player.team,
-#                 "is_radiant": player.is_radiant,
-#                 "hero_id": player.hero_id,
-#                 "hero_name": player.hero_name,
-#                 "kills": player.kills,
-#                 "deaths": player.deaths,
-#                 "assists": player.assists,
-#                 "net_worth": player.net_worth,
-#                 "lane_role": player.lane_role,
-#                 "lane_efficiency_pct": player.lane_efficiency_pct,
-#                 "teamfight_participation": player.teamfight_participation,
-#             }
-#         )
-
-#     return pd.DataFrame(rows)
-
-
-# def main() -> None:
-#     print(f"Parsing replay: {REPLAY_PATH}")
-
-#     match = gem.parse(REPLAY_PATH)
-
-#     df = build_player_match_dataframe(match)
-
-#     print("\n--- player_match ---")
-#     print(df.to_string(index=False))
-
-#     print("\n--- dtypes ---")
-#     print(df.dtypes)
-
-
-# if __name__ == "__main__":
-#     main()
-
+import argparse
 from pathlib import Path
 
 import gem
 import pandas as pd
 
 
-REPLAY_PATH = Path("data/staging/replays/8943466067.dem")
+STAGING_REPLAYS_DIR = Path("data/staging/replays")
+SILVER_PLAYER_MATCH_DIR = Path("data/silver/player_match")
 
 
 def build_player_match_dataframe(match) -> pd.DataFrame:
@@ -161,7 +46,9 @@ def validate_player_match(df: pd.DataFrame) -> None:
         print("WARNING: Some players have no account_id")
 
     if df["hero_id"].isna().any():
-        raise ValueError("Some players have no hero_id")
+        raise ValueError(
+            "Some players have no hero_id"
+        )
 
     unusual_lane_efficiency = df[
         (df["lane_efficiency_pct"] < 0)
@@ -189,7 +76,7 @@ def save_player_match(
     match_id: int,
 ) -> Path:
     output_dir = (
-        Path("data/silver/player_match")
+        SILVER_PLAYER_MATCH_DIR
         / f"match_id={match_id}"
     )
 
@@ -198,7 +85,10 @@ def save_player_match(
         exist_ok=True,
     )
 
-    output_path = output_dir / "part-00000.parquet"
+    output_path = (
+        output_dir
+        / "part-00000.parquet"
+    )
 
     df.to_parquet(
         output_path,
@@ -208,24 +98,78 @@ def save_player_match(
     return output_path
 
 
+def parse_arguments() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Parse a Dota 2 replay and "
+            "build the player_match Silver dataset."
+        )
+    )
+
+    parser.add_argument(
+        "match_id",
+        type=int,
+        help="Dota 2 match ID",
+    )
+
+    return parser.parse_args()
+
+
 def main() -> None:
-    print(f"Parsing replay: {REPLAY_PATH}")
+    args = parse_arguments()
+    match_id = args.match_id
 
-    match = gem.parse(REPLAY_PATH)
+    replay_path = (
+        STAGING_REPLAYS_DIR
+        / f"{match_id}.dem"
+    )
 
-    df = build_player_match_dataframe(match)
+    if not replay_path.exists():
+        raise FileNotFoundError(
+            f"Replay not found: {replay_path}"
+        )
 
-    validate_player_match(df)
+    print(
+        f"Parsing replay: {replay_path}"
+    )
+
+    match = gem.parse(
+        replay_path
+    )
+
+    if match.match_id != match_id:
+        raise ValueError(
+            f"Replay match_id mismatch. "
+            f"Expected {match_id}, "
+            f"got {match.match_id}"
+        )
+
+    print(
+        f"Match ID: {match.match_id}"
+    )
+
+    print(
+        f"Players found: {len(match.players)}"
+    )
+
+    df = build_player_match_dataframe(
+        match
+    )
+
+    validate_player_match(
+        df
+    )
 
     print("\n--- player_match ---")
-    print(df.to_string(index=False))
-
-    print("\n--- dtypes ---")
-    print(df.dtypes)
+    print(
+        df.to_string(
+            index=False
+        )
+    )
 
     output_path = save_player_match(
         df,
-        match.match_id,
+        match_id,
     )
 
     print("\nSilver dataset saved:")
