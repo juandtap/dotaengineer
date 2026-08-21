@@ -10,7 +10,7 @@ from pipeline import ingest_match
 BASE_URL = "https://api.opendota.com/api"
 LEAGUE_ID = 19719
 
-RAW_MATCHES_DIR = Path("data/raw/api/matches")
+SILVER_PLAYER_MATCH_DIR = Path("data/silver/player_match")
 
 
 def get_league_matches(league_id: int) -> list[dict]:
@@ -27,16 +27,36 @@ def get_league_matches(league_id: int) -> list[dict]:
 
 
 def get_ingested_match_ids() -> set[int]:
-    if not RAW_MATCHES_DIR.exists():
+    if not SILVER_PLAYER_MATCH_DIR.exists():
         return set()
 
     match_ids = set()
 
-    for path in RAW_MATCHES_DIR.glob("*.json"):
+    for player_match_dir in SILVER_PLAYER_MATCH_DIR.glob("match_id=*"):
         try:
-            match_ids.add(int(path.stem))
+            match_id = int(
+                player_match_dir.name.replace("match_id=", "")
+            )
         except ValueError:
             continue
+
+        player_match_path = (
+            SILVER_PLAYER_MATCH_DIR
+            / f"match_id={match_id}"
+            / "part-00000.parquet"
+        )
+
+        match_path = (
+            Path("data/silver/match")
+            / f"match_id={match_id}"
+            / "part-00000.parquet"
+        )
+
+        if (
+            player_match_path.exists()
+            and match_path.exists()
+        ):
+            match_ids.add(match_id)
 
     return match_ids
 
@@ -129,10 +149,12 @@ def main() -> None:
     )
 
     print(f"League ID: {LEAGUE_ID}")
+
     print(
         f"Total league matches: "
         f"{len(league_matches)}"
     )
+
     print(
         f"Matches selected: "
         f"{len(selected_matches)}"
@@ -192,13 +214,17 @@ def main() -> None:
         match_id = match["match_id"]
 
         print("\n" + "#" * 60)
+
         print(
             f"Batch match "
             f"{index}/{len(pending_matches)}"
         )
+
         print("#" * 60)
 
-        ingest_match(match_id)
+        ingest_match(
+            match_id
+        )
 
 
 if __name__ == "__main__":

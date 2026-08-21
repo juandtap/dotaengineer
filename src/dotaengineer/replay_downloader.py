@@ -16,14 +16,20 @@ STAGING_REPLAYS_DIR = Path("data/staging/replays")
 
 
 def load_match(match_id: int) -> dict:
-    match_path = RAW_MATCHES_DIR / f"{match_id}.json"
+    match_path = (
+        RAW_MATCHES_DIR
+        / f"{match_id}.json"
+    )
 
     if not match_path.exists():
         raise FileNotFoundError(
             f"Match JSON not found: {match_path}"
         )
 
-    with match_path.open("r", encoding="utf-8") as file:
+    with match_path.open(
+        "r",
+        encoding="utf-8",
+    ) as file:
         return json.load(file)
 
 
@@ -36,41 +42,70 @@ def download_replay(
         exist_ok=True,
     )
 
-    output_path = RAW_REPLAYS_DIR / f"{match_id}.dem.bz2"
+    output_path = (
+        RAW_REPLAYS_DIR
+        / f"{match_id}.dem.bz2"
+    )
+
+    temp_path = (
+        RAW_REPLAYS_DIR
+        / f"{match_id}.dem.bz2.part"
+    )
 
     print("Downloading replay from:")
     print(replay_url)
 
-    with requests.get(
-        replay_url,
-        stream=True,
-        timeout=120,
-        allow_redirects=True,
-    ) as response:
-        print(f"HTTP status: {response.status_code}")
-        print(
-            f"Content-Type: "
-            f"{response.headers.get('Content-Type')}"
-        )
-        print(
-            f"Content-Length: "
-            f"{response.headers.get('Content-Length')}"
-        )
-        print(f"Final URL: {response.url}")
+    try:
+        with requests.get(
+            replay_url,
+            stream=True,
+            timeout=120,
+            allow_redirects=True,
+        ) as response:
 
-        response.raise_for_status()
+            print(
+                f"HTTP status: "
+                f"{response.status_code}"
+            )
 
-        with output_path.open("wb") as file:
-            for chunk in response.iter_content(
-                chunk_size=1024 * 1024
-            ):
-                if chunk:
-                    file.write(chunk)
+            print(
+                f"Content-Type: "
+                f"{response.headers.get('Content-Type')}"
+            )
 
-    if output_path.stat().st_size == 0:
-        raise ValueError(
-            "Downloaded replay is empty."
+            print(
+                f"Content-Length: "
+                f"{response.headers.get('Content-Length')}"
+            )
+
+            print(
+                f"Final URL: "
+                f"{response.url}"
+            )
+
+            response.raise_for_status()
+
+            with temp_path.open("wb") as file:
+                for chunk in response.iter_content(
+                    chunk_size=1024 * 1024
+                ):
+                    if chunk:
+                        file.write(chunk)
+
+        if temp_path.stat().st_size == 0:
+            raise ValueError(
+                "Downloaded replay is empty."
+            )
+
+        temp_path.replace(
+            output_path
         )
+
+    except Exception:
+        if temp_path.exists():
+            temp_path.unlink()
+
+        raise
 
     return output_path
 
@@ -81,7 +116,9 @@ def detect_compression(
     with compressed_path.open("rb") as file:
         magic = file.read(4)
 
-    if magic.startswith(BZIP2_MAGIC):
+    if magic.startswith(
+        BZIP2_MAGIC
+    ):
         return "bzip2"
 
     if magic == ZSTD_MAGIC:
@@ -101,27 +138,35 @@ def decompress_bzip2(
         compressed_path,
         "rb",
     ) as source:
+
         with output_path.open(
             "wb",
         ) as destination:
+
             while chunk := source.read(
                 1024 * 1024
             ):
-                destination.write(chunk)
+                destination.write(
+                    chunk
+                )
 
 
 def decompress_zstd(
     compressed_path: Path,
     output_path: Path,
 ) -> None:
-    decompressor = zstd.ZstdDecompressor()
+    decompressor = (
+        zstd.ZstdDecompressor()
+    )
 
     with compressed_path.open(
         "rb",
     ) as source:
+
         with output_path.open(
             "wb",
         ) as destination:
+
             decompressor.copy_stream(
                 source,
                 destination,
@@ -144,6 +189,10 @@ def decompress_replay(
         )
     )
 
+    temp_path = Path(
+        f"{output_path}.part"
+    )
+
     compression = detect_compression(
         compressed_path
     )
@@ -153,28 +202,39 @@ def decompress_replay(
         f"{compression.upper()}"
     )
 
-    if compression == "bzip2":
-        decompress_bzip2(
-            compressed_path,
-            output_path,
+    try:
+        if compression == "bzip2":
+            decompress_bzip2(
+                compressed_path,
+                temp_path,
+            )
+
+        elif compression == "zstd":
+            decompress_zstd(
+                compressed_path,
+                temp_path,
+            )
+
+        if not temp_path.exists():
+            raise FileNotFoundError(
+                "Replay decompression finished "
+                "but output file was not created."
+            )
+
+        if temp_path.stat().st_size == 0:
+            raise ValueError(
+                "Decompressed replay is empty."
+            )
+
+        temp_path.replace(
+            output_path
         )
 
-    elif compression == "zstd":
-        decompress_zstd(
-            compressed_path,
-            output_path,
-        )
+    except Exception:
+        if temp_path.exists():
+            temp_path.unlink()
 
-    if not output_path.exists():
-        raise FileNotFoundError(
-            "Replay decompression finished "
-            "but output file was not created."
-        )
-
-    if output_path.stat().st_size == 0:
-        raise ValueError(
-            "Decompressed replay is empty."
-        )
+        raise
 
     return output_path
 
@@ -207,10 +267,12 @@ def parse_arguments() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_arguments()
+
     match_id = args.match_id
 
     print(
-        f"Processing match: {match_id}"
+        f"Processing match: "
+        f"{match_id}"
     )
 
     match = load_match(

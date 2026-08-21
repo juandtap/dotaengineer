@@ -361,6 +361,174 @@ The value `lane_efficiency_pct` can be higher than 100. This could mean that `ge
 
 or questions ? 
 
-Wny teams rely on tiny hard carry ?
+Why teams rely on tiny hard carry ?
 Lone Droid is broken ? In the second match for Team Spirit vs Iron Wing lone druid was ignored despite of the first match was uncontrolable
 Radiant teams has advantage ? Nigma won their last match as dire. 
+
+
+## Current Pipeline 
+
+DOTAENGINEER can now discover and process matches from The International 2026.
+
+The current pipeline looks like this:
+
+```text
+OpenDota League API
+        |
+        v
+Match Discovery
+        |
+        v
+OpenDota Match API
+        |
+        v
+Raw JSON
+        |
+        v
+Valve Replay Server
+        |
+        v
+Compressed Replay
+        |
+        v
+Replay Decompression
+        |
+        v
+Source 2 .dem
+        |
+        v
+gem-dota
+        |
+        v
+Data Validation
+        |
+        v
+Silver Parquet
+   |           |
+   v           v
+ match    player_match
+        |
+        v
+      DuckDB
+        |
+        v
+     Analytics
+```
+
+
+## Match Discovery
+
+Matches can be discovered directly from a Dota 2 league using the OpenDota League API.
+
+The International 2026 currently uses: `league_id = 19719`
+
+Instead of requesting the full OpenDota match endpoint for every match, discovery uses the metadata returned by the league endpoint to filter matches locally.
+
+This reduces API usage and helps avoid unnecessary rate-limit errors.
+
+Matches can currently be filtered by date:
+
+`python src/dotaengineer/match_discovery.py --date 2026-08-20`
+
+and pending matches can be ingested with:
+
+`python src/dotaengineer/match_discovery.py --date 2026-08-20 --ingest`
+
+### Pipeline Resilience
+
+The pipeline checks each processing stage independently.
+
+A match is only considered fully ingested when both Silver datasets exist:
+
+`data/silver/match/`
+`data/silver/player_match/`
+
+If processing stops halfway through, the pipeline can reuse the artifacts that were already successfully created instead of starting again from the beginning.
+
+Replay downloads and decompression also use temporary `.part` files. The final file is only created after the operation finishes successfully.
+
+This prevents interrupted downloads from being treated as valid replay files.
+
+### Silver Layer
+
+The current Silver layer contains two datasets.
+
+`match`
+
+One row per match.
+
+It contains match-level information such as:
+
+   match ID
+   league ID
+   duration
+   teams
+   score
+   winner
+   first blood
+   game mode
+   tower status
+   barracks status
+
+
+`player_match`
+
+One row per player per match.
+
+It currently contains:
+
+   player and Steam IDs
+   player name
+   hero
+   win/loss
+   kills, deaths and assists
+   KDA
+   last hits and denies
+   net worth
+   hero damage
+   healing
+   tower damage
+   buybacks
+   rune pickups
+   wards
+   lane information
+   teamfight participation
+
+
+**Notes**
+
+The value lane_efficiency_pct can be higher than 100. This could mean that gem-dota calculates it differently, or that the metric is not limited to the 0-100 range. The meaning of this metric still needs to be investigated.
+
+## Analytics with DuckDB
+
+DuckDB is used as the local OLAP query engine for the analytical layer.
+
+Unlike PostgreSQL, DuckDB does not require a separate database server. The engine runs directly inside the Python process and can query the Silver Parquet files without importing them into another database first.
+
+This makes it a good fit for DOTAENGINEER because the analytical datasets are already stored as columnar Parquet files.
+
+Example:
+
+```
+SELECT
+    player_name,
+    SUM(kills) AS kills
+FROM player_matches
+GROUP BY player_name
+ORDER BY kills DESC;
+```
+
+## TI 2026 Dataset Status 
+
+The first batch contains all 10 matches played on August 20 during Day 1 of The International 2026 playoffs.
+
+All 10 matches were successfully:
+
+discovered
+downloaded
+decompressed
+parsed
+validated
+stored in the Silver layer
+
+More matches will be added incrementally as the tournament continues.

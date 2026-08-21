@@ -1,17 +1,23 @@
 import argparse
+import json
 from pathlib import Path
 
 import gem
 
 from opendota_client import get_match, save_raw_match
+
 from replay_downloader import (
     download_replay,
     decompress_replay,
     format_size,
 )
+
 from replay_parser import (
+    build_match_dataframe,
     build_player_match_dataframe,
+    validate_match,
     validate_player_match,
+    save_match,
     save_player_match,
 )
 
@@ -19,6 +25,8 @@ from replay_parser import (
 RAW_MATCHES_DIR = Path("data/raw/api/matches")
 RAW_REPLAYS_DIR = Path("data/raw/replays")
 STAGING_REPLAYS_DIR = Path("data/staging/replays")
+
+SILVER_MATCH_DIR = Path("data/silver/match")
 SILVER_PLAYER_MATCH_DIR = Path("data/silver/player_match")
 
 
@@ -38,11 +46,9 @@ def ingest_match(match_id: int) -> None:
 
     if match_json_path.exists():
         print(
-            f"\n[1/4] RAW match JSON already exists:"
+            "\n[1/4] RAW match JSON already exists:"
             f"\n{match_json_path}"
         )
-
-        import json
 
         with match_json_path.open(
             "r",
@@ -66,7 +72,7 @@ def ingest_match(match_id: int) -> None:
         )
 
         print(
-            f"RAW match JSON saved:"
+            "RAW match JSON saved:"
             f"\n{match_json_path}"
         )
 
@@ -91,7 +97,7 @@ def ingest_match(match_id: int) -> None:
 
     if compressed_replay_path.exists():
         print(
-            f"\n[2/4] RAW replay already exists:"
+            "\n[2/4] RAW replay already exists:"
             f"\n{compressed_replay_path}"
             f"\nSize: "
             f"{format_size(compressed_replay_path)}"
@@ -110,7 +116,7 @@ def ingest_match(match_id: int) -> None:
         )
 
         print(
-            f"RAW replay saved:"
+            "RAW replay saved:"
             f"\n{compressed_replay_path}"
             f"\nSize: "
             f"{format_size(compressed_replay_path)}"
@@ -127,8 +133,8 @@ def ingest_match(match_id: int) -> None:
 
     if replay_path.exists():
         print(
-            f"\n[3/4] Decompressed replay "
-            f"already exists:"
+            "\n[3/4] Decompressed replay "
+            "already exists:"
             f"\n{replay_path}"
             f"\nSize: "
             f"{format_size(replay_path)}"
@@ -144,7 +150,7 @@ def ingest_match(match_id: int) -> None:
         )
 
         print(
-            f"Replay decompressed:"
+            "Replay decompressed:"
             f"\n{replay_path}"
             f"\nSize: "
             f"{format_size(replay_path)}"
@@ -154,17 +160,40 @@ def ingest_match(match_id: int) -> None:
     # STEP 4 — Replay parsing + Silver
     # ---------------------------------------------------------
 
-    silver_path = (
+    match_silver_path = (
+        SILVER_MATCH_DIR
+        / f"match_id={match_id}"
+        / "part-00000.parquet"
+    )
+
+    player_match_silver_path = (
         SILVER_PLAYER_MATCH_DIR
         / f"match_id={match_id}"
         / "part-00000.parquet"
     )
 
-    if silver_path.exists():
+    match_exists = (
+        match_silver_path.exists()
+    )
+
+    player_match_exists = (
+        player_match_silver_path.exists()
+    )
+
+    if match_exists and player_match_exists:
         print(
-            f"\n[4/4] Silver player_match "
-            f"already exists:"
-            f"\n{silver_path}"
+            "\n[4/4] Silver datasets "
+            "already exist:"
+        )
+
+        print(
+            f"match:"
+            f"\n{match_silver_path}"
+        )
+
+        print(
+            f"\nplayer_match:"
+            f"\n{player_match_silver_path}"
         )
 
     else:
@@ -188,24 +217,48 @@ def ingest_match(match_id: int) -> None:
             f"{len(parsed_match.players)}"
         )
 
+        match_df = build_match_dataframe(
+            parsed_match
+        )
+
         player_match_df = (
             build_player_match_dataframe(
                 parsed_match
             )
         )
 
+        validate_match(
+            match_df
+        )
+
         validate_player_match(
             player_match_df
         )
 
-        silver_path = save_player_match(
-            player_match_df,
+        match_silver_path = save_match(
+            match_df,
             match_id,
         )
 
+        player_match_silver_path = (
+            save_player_match(
+                player_match_df,
+                match_id,
+            )
+        )
+
         print(
-            f"Silver dataset saved:"
-            f"\n{silver_path}"
+            "\nSilver datasets saved:"
+        )
+
+        print(
+            f"match:"
+            f"\n{match_silver_path}"
+        )
+
+        print(
+            f"\nplayer_match:"
+            f"\n{player_match_silver_path}"
         )
 
     # ---------------------------------------------------------
@@ -213,9 +266,11 @@ def ingest_match(match_id: int) -> None:
     # ---------------------------------------------------------
 
     print("\n" + "=" * 60)
+
     print(
         f"Match {match_id} processed successfully."
     )
+
     print("=" * 60)
 
 

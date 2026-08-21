@@ -4,6 +4,7 @@ charset-normalizer==3.5.0
 comm==0.2.3
 cramjam==2.11.0
 debugpy==1.8.21
+duckdb==1.5.5
 executing==2.2.1
 fastparquet==2026.5.0
 fsspec==2026.7.0
