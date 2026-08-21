@@ -532,3 +532,78 @@ validated
 stored in the Silver layer
 
 More matches will be added incrementally as the tournament continues.
+
+21/08/2026
+
+# DOTAENGINEER
+
+DOTAENGINEER is a data engineering and analytics project built around professional Dota 2 replay data.
+
+The project extracts structured data directly from `.dem` replay files and transforms it into analytical datasets that can be queried and used to study player performance, economy, movement, and farming patterns.
+
+The initial dataset focuses on matches from **The International 2026**.
+
+---
+
+## Current Status
+
+The pipeline currently supports:
+
+- Match discovery from OpenDota league data
+- Replay downloading and decompression
+- `.dem` replay parsing with `gem-dota`
+- Idempotent ingestion
+- Match-level Silver datasets
+- Player-level Silver datasets
+- Player telemetry time series
+- DuckDB analytics over Parquet datasets
+- Player economy analysis
+- Spatial movement analysis
+- Spatial net worth growth analysis
+- Experimental spatial economic efficiency
+- Dota 2 map coordinate calibration
+- Neutral camp spatial analysis
+
+The current development dataset contains the first **10 matches from August 20, 2026** from The International 2026.
+
+---
+
+## Architecture
+
+```text
+OpenDota API
+     │
+     ▼
+Match Discovery
+     │
+     ▼
+Replay Downloader
+     │
+     ├── Match JSON
+     ├── .dem.bz2
+     └── .dem
+            │
+            ▼
+        gem-dota
+            │
+            ▼
+      Replay Parser
+            │
+            ▼
+       Silver Layer
+            │
+            ├── match
+            ├── player_match
+            └── player_timeseries
+                    │
+                    ▼
+                 DuckDB
+                    │
+                    ▼
+               Analytics
+                    │
+                    ├── Player Performance
+                    ├── Economy
+                    ├── Movement
+                    ├── Spatial Economy
+                    └── Neutral Camps
