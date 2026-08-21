@@ -5,10 +5,15 @@ import gem
 import pandas as pd
 
 
+TICKS_PER_SECOND = 30.0
+
 STAGING_REPLAYS_DIR = Path("data/staging/replays")
 
 SILVER_MATCH_DIR = Path("data/silver/match")
 SILVER_PLAYER_MATCH_DIR = Path("data/silver/player_match")
+SILVER_PLAYER_TIMESERIES_DIR = Path(
+    "data/silver/player_timeseries"
+)
 
 
 def build_match_dataframe(match) -> pd.DataFrame:
@@ -72,23 +77,104 @@ def build_player_match_dataframe(match) -> pd.DataFrame:
                 "obs_placed": player.obs_placed,
                 "sen_placed": player.sen_placed,
                 "lane_role": player.lane_role,
-                "lane_efficiency_pct": player.lane_efficiency_pct,
-                "teamfight_participation": player.teamfight_participation,
+                "lane_efficiency_pct": (
+                    player.lane_efficiency_pct
+                ),
+                "teamfight_participation": (
+                    player.teamfight_participation
+                ),
             }
         )
 
     return pd.DataFrame(rows)
 
 
-def validate_match(df: pd.DataFrame) -> None:
+def build_player_timeseries_dataframe(
+    match,
+) -> pd.DataFrame:
+    rows = []
+
+    for player in match.players:
+        position_log = player.position_log
+        net_worth_t = player.net_worth_t
+        xp_t = player.xp_t
+
+        lengths = {
+            "position_log": len(position_log),
+            "net_worth_t": len(net_worth_t),
+            "xp_t": len(xp_t),
+        }
+
+        if len(set(lengths.values())) != 1:
+            raise ValueError(
+                f"Time series length mismatch "
+                f"for player {player.player_name}: "
+                f"{lengths}"
+            )
+
+        for sample_index, (
+            position,
+            net_worth,
+            xp,
+        ) in enumerate(
+            zip(
+                position_log,
+                net_worth_t,
+                xp_t,
+            )
+        ):
+            tick, x, y = position
+
+            relative_tick = (
+                tick
+                - match.game_start_tick
+            )
+
+            game_time_seconds = (
+                relative_tick
+                / TICKS_PER_SECOND
+            )
+
+            rows.append(
+                {
+                    "match_id": match.match_id,
+                    "player_id": player.player_id,
+                    "account_id": player.account_id,
+                    "player_name": player.player_name,
+                    "hero_id": player.hero_id,
+                    "hero_name": player.hero_name,
+                    "is_radiant": player.is_radiant,
+                    "sample_index": sample_index,
+                    "tick": tick,
+                    "game_time_seconds": (
+                        game_time_seconds
+                    ),
+                    "game_time_minutes": (
+                        game_time_seconds / 60
+                    ),
+                    "x": x,
+                    "y": y,
+                    "net_worth": net_worth,
+                    "xp": xp,
+                }
+            )
+
+    return pd.DataFrame(rows)
+
+
+def validate_match(
+    df: pd.DataFrame,
+) -> None:
     if len(df) != 1:
         raise ValueError(
-            f"Expected exactly 1 match row, found {len(df)}"
+            f"Expected exactly 1 match row, "
+            f"found {len(df)}"
         )
 
     if df["match_id"].isna().any():
         raise ValueError(
-            "Match dataset contains a null match_id."
+            "Match dataset contains "
+            "a null match_id."
         )
 
     if df["radiant_win"].isna().any():
@@ -96,31 +182,46 @@ def validate_match(df: pd.DataFrame) -> None:
             "WARNING: radiant_win is null."
         )
 
-    if df["duration_seconds"].isna().any():
+    if df[
+        "duration_seconds"
+    ].isna().any():
         print(
-            "WARNING: duration_seconds is null."
+            "WARNING: duration_seconds "
+            "is null."
         )
 
 
-def validate_player_match(df: pd.DataFrame) -> None:
+def validate_player_match(
+    df: pd.DataFrame,
+) -> None:
     if len(df) != 10:
         raise ValueError(
-            f"Expected 10 players, found {len(df)}"
+            f"Expected 10 players, "
+            f"found {len(df)}"
         )
 
-    if df["account_id"].isna().any():
+    if df[
+        "account_id"
+    ].isna().any():
         print(
-            "WARNING: Some players have no account_id."
+            "WARNING: Some players "
+            "have no account_id."
         )
 
-    if df["hero_id"].isna().any():
+    if df[
+        "hero_id"
+    ].isna().any():
         raise ValueError(
-            "Some players have no hero_id."
+            "Some players have "
+            "no hero_id."
         )
 
-    if df["match_id"].isna().any():
+    if df[
+        "match_id"
+    ].isna().any():
         raise ValueError(
-            "Some player rows have no match_id."
+            "Some player rows "
+            "have no match_id."
         )
 
     unusual_lane_efficiency = df[
@@ -130,8 +231,9 @@ def validate_player_match(df: pd.DataFrame) -> None:
 
     if not unusual_lane_efficiency.empty:
         print(
-            "\nNOTE: lane_efficiency_pct contains "
-            "values outside the 0-100 range:"
+            "\nNOTE: lane_efficiency_pct "
+            "contains values outside "
+            "the 0-100 range:"
         )
 
         print(
@@ -141,7 +243,85 @@ def validate_player_match(df: pd.DataFrame) -> None:
                     "hero_name",
                     "lane_efficiency_pct",
                 ]
-            ].to_string(index=False)
+            ].to_string(
+                index=False
+            )
+        )
+
+
+def validate_player_timeseries(
+    df: pd.DataFrame,
+) -> None:
+    if df.empty:
+        raise ValueError(
+            "player_timeseries "
+            "dataset is empty."
+        )
+
+    if df[
+        "match_id"
+    ].isna().any():
+        raise ValueError(
+            "player_timeseries "
+            "contains null match_id."
+        )
+
+    if df[
+        "player_id"
+    ].isna().any():
+        raise ValueError(
+            "player_timeseries "
+            "contains null player_id."
+        )
+
+    if df[
+        "tick"
+    ].isna().any():
+        raise ValueError(
+            "player_timeseries "
+            "contains null tick."
+        )
+
+    if df[
+        "net_worth"
+    ].isna().any():
+        print(
+            "WARNING: player_timeseries "
+            "contains null net_worth values."
+        )
+
+    if df[
+        "xp"
+    ].isna().any():
+        print(
+            "WARNING: player_timeseries "
+            "contains null XP values."
+        )
+
+    players_found = (
+        df["player_id"]
+        .nunique()
+    )
+
+    if players_found != 10:
+        raise ValueError(
+            f"Expected timeseries data "
+            f"for 10 players, found "
+            f"{players_found}"
+        )
+
+    duplicate_rows = df.duplicated(
+        subset=[
+            "match_id",
+            "player_id",
+            "sample_index",
+        ]
+    )
+
+    if duplicate_rows.any():
+        raise ValueError(
+            "Duplicate player_timeseries "
+            "samples found."
         )
 
 
@@ -199,11 +379,38 @@ def save_player_match(
     return output_path
 
 
+def save_player_timeseries(
+    df: pd.DataFrame,
+    match_id: int,
+) -> Path:
+    output_dir = (
+        SILVER_PLAYER_TIMESERIES_DIR
+        / f"match_id={match_id}"
+    )
+
+    output_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    output_path = (
+        output_dir
+        / "part-00000.parquet"
+    )
+
+    df.to_parquet(
+        output_path,
+        index=False,
+    )
+
+    return output_path
+
+
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Parse a Dota 2 replay and "
-            "build Silver datasets."
+            "Parse a Dota 2 replay "
+            "and build Silver datasets."
         )
     )
 
@@ -227,18 +434,23 @@ def main() -> None:
 
     if not replay_path.exists():
         raise FileNotFoundError(
-            f"Replay not found: {replay_path}"
+            f"Replay not found: "
+            f"{replay_path}"
         )
 
     print(
-        f"Parsing replay: {replay_path}"
+        f"Parsing replay: "
+        f"{replay_path}"
     )
 
     parsed_match = gem.parse(
         replay_path
     )
 
-    if parsed_match.match_id != match_id:
+    if (
+        parsed_match.match_id
+        != match_id
+    ):
         raise ValueError(
             f"Replay match_id mismatch. "
             f"Expected {match_id}, "
@@ -246,7 +458,8 @@ def main() -> None:
         )
 
     print(
-        f"Match ID: {parsed_match.match_id}"
+        f"Match ID: "
+        f"{parsed_match.match_id}"
     )
 
     print(
@@ -254,12 +467,25 @@ def main() -> None:
         f"{len(parsed_match.players)}"
     )
 
-    match_df = build_match_dataframe(
-        parsed_match
+    match_df = (
+        build_match_dataframe(
+            parsed_match
+        )
     )
 
     player_match_df = (
         build_player_match_dataframe(
+            parsed_match
+        )
+    )
+
+    print(
+        "\nBuilding "
+        "player_timeseries..."
+    )
+
+    player_timeseries_df = (
+        build_player_timeseries_dataframe(
             parsed_match
         )
     )
@@ -272,23 +498,49 @@ def main() -> None:
         player_match_df
     )
 
-    print("\n--- match ---")
+    validate_player_timeseries(
+        player_timeseries_df
+    )
+
     print(
-        match_df.to_string(
+        f"\nplayer_timeseries rows: "
+        f"{len(player_timeseries_df):,}"
+    )
+
+    print(
+        f"player_timeseries players: "
+        f"{player_timeseries_df['player_id'].nunique()}"
+    )
+
+    print(
+        "\n--- player_timeseries sample ---"
+    )
+
+    print(
+        player_timeseries_df[
+            [
+                "player_name",
+                "hero_name",
+                "sample_index",
+                "tick",
+                "game_time_seconds",
+                "x",
+                "y",
+                "net_worth",
+                "xp",
+            ]
+        ]
+        .head(10)
+        .to_string(
             index=False
         )
     )
 
-    print("\n--- player_match ---")
-    print(
-        player_match_df.to_string(
-            index=False
+    match_output_path = (
+        save_match(
+            match_df,
+            match_id,
         )
-    )
-
-    match_output_path = save_match(
-        match_df,
-        match_id,
     )
 
     player_match_output_path = (
@@ -298,16 +550,30 @@ def main() -> None:
         )
     )
 
-    print("\nSilver datasets saved:")
+    player_timeseries_output_path = (
+        save_player_timeseries(
+            player_timeseries_df,
+            match_id,
+        )
+    )
 
     print(
-        f"match:"
+        "\nSilver datasets saved:"
+    )
+
+    print(
+        f"\nmatch:"
         f"\n{match_output_path}"
     )
 
     print(
         f"\nplayer_match:"
         f"\n{player_match_output_path}"
+    )
+
+    print(
+        f"\nplayer_timeseries:"
+        f"\n{player_timeseries_output_path}"
     )
 
 

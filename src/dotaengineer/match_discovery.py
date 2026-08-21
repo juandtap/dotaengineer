@@ -10,11 +10,20 @@ from pipeline import ingest_match
 BASE_URL = "https://api.opendota.com/api"
 LEAGUE_ID = 19719
 
+SILVER_MATCH_DIR = Path("data/silver/match")
 SILVER_PLAYER_MATCH_DIR = Path("data/silver/player_match")
+SILVER_PLAYER_TIMESERIES_DIR = Path(
+    "data/silver/player_timeseries"
+)
 
 
-def get_league_matches(league_id: int) -> list[dict]:
-    url = f"{BASE_URL}/leagues/{league_id}/matches"
+def get_league_matches(
+    league_id: int,
+) -> list[dict]:
+    url = (
+        f"{BASE_URL}/leagues/"
+        f"{league_id}/matches"
+    )
 
     response = requests.get(
         url,
@@ -27,18 +36,30 @@ def get_league_matches(league_id: int) -> list[dict]:
 
 
 def get_ingested_match_ids() -> set[int]:
-    if not SILVER_PLAYER_MATCH_DIR.exists():
+    if not SILVER_MATCH_DIR.exists():
         return set()
 
     match_ids = set()
 
-    for player_match_dir in SILVER_PLAYER_MATCH_DIR.glob("match_id=*"):
+    for match_dir in SILVER_MATCH_DIR.glob(
+        "match_id=*"
+    ):
         try:
             match_id = int(
-                player_match_dir.name.replace("match_id=", "")
+                match_dir.name.replace(
+                    "match_id=",
+                    "",
+                )
             )
+
         except ValueError:
             continue
+
+        match_path = (
+            SILVER_MATCH_DIR
+            / f"match_id={match_id}"
+            / "part-00000.parquet"
+        )
 
         player_match_path = (
             SILVER_PLAYER_MATCH_DIR
@@ -46,48 +67,66 @@ def get_ingested_match_ids() -> set[int]:
             / "part-00000.parquet"
         )
 
-        match_path = (
-            Path("data/silver/match")
+        player_timeseries_path = (
+            SILVER_PLAYER_TIMESERIES_DIR
             / f"match_id={match_id}"
             / "part-00000.parquet"
         )
 
         if (
-            player_match_path.exists()
-            and match_path.exists()
+            match_path.exists()
+            and player_match_path.exists()
+            and player_timeseries_path.exists()
         ):
-            match_ids.add(match_id)
+            match_ids.add(
+                match_id
+            )
 
     return match_ids
 
 
-def get_match_date(start_time: int | None) -> str | None:
+def get_match_date(
+    start_time: int | None,
+) -> str | None:
     if not start_time:
         return None
 
     return datetime.fromtimestamp(
         start_time,
         tz=timezone.utc,
-    ).strftime("%Y-%m-%d")
+    ).strftime(
+        "%Y-%m-%d"
+    )
 
 
-def format_match_time(start_time: int | None) -> str:
+def format_match_time(
+    start_time: int | None,
+) -> str:
     if not start_time:
         return "Unknown"
 
     return datetime.fromtimestamp(
         start_time,
         tz=timezone.utc,
-    ).strftime("%Y-%m-%d %H:%M UTC")
+    ).strftime(
+        "%Y-%m-%d %H:%M UTC"
+    )
 
 
-def get_team_display(match: dict, side: str) -> str:
-    name = match.get(f"{side}_team_name")
+def get_team_display(
+    match: dict,
+    side: str,
+) -> str:
+    name = match.get(
+        f"{side}_team_name"
+    )
 
     if name:
         return name
 
-    team_id = match.get(f"{side}_team_id")
+    team_id = match.get(
+        f"{side}_team_id"
+    )
 
     if team_id:
         return f"Team {team_id}"
@@ -106,13 +145,18 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--date",
         type=str,
-        help="Filter by UTC date, e.g. 2026-08-20",
+        help=(
+            "Filter by UTC date, "
+            "e.g. 2026-08-20"
+        ),
     )
 
     parser.add_argument(
         "--ingest",
         action="store_true",
-        help="Ingest pending matches",
+        help=(
+            "Ingest pending matches"
+        ),
     )
 
     return parser.parse_args()
@@ -121,8 +165,10 @@ def parse_arguments() -> argparse.Namespace:
 def main() -> None:
     args = parse_arguments()
 
-    league_matches = get_league_matches(
-        LEAGUE_ID
+    league_matches = (
+        get_league_matches(
+            LEAGUE_ID
+        )
     )
 
     ingested_match_ids = (
@@ -132,23 +178,38 @@ def main() -> None:
     selected_matches = []
 
     for match in league_matches:
-        match_date = get_match_date(
-            match.get("start_time")
+        match_date = (
+            get_match_date(
+                match.get(
+                    "start_time"
+                )
+            )
         )
 
-        if args.date and match_date != args.date:
+        if (
+            args.date
+            and match_date
+            != args.date
+        ):
             continue
 
-        selected_matches.append(match)
+        selected_matches.append(
+            match
+        )
 
     selected_matches.sort(
-        key=lambda match: match.get(
-            "start_time",
-            0,
+        key=lambda match: (
+            match.get(
+                "start_time",
+                0,
+            )
         )
     )
 
-    print(f"League ID: {LEAGUE_ID}")
+    print(
+        f"League ID: "
+        f"{LEAGUE_ID}"
+    )
 
     print(
         f"Total league matches: "
@@ -163,7 +224,9 @@ def main() -> None:
     print()
 
     for match in selected_matches:
-        match_id = match["match_id"]
+        match_id = (
+            match["match_id"]
+        )
 
         radiant = get_team_display(
             match,
@@ -175,13 +238,18 @@ def main() -> None:
             "dire",
         )
 
-        match_time = format_match_time(
-            match.get("start_time")
+        match_time = (
+            format_match_time(
+                match.get(
+                    "start_time"
+                )
+            )
         )
 
         status = (
             "INGESTED"
-            if match_id in ingested_match_ids
+            if match_id
+            in ingested_match_ids
             else "PENDING"
         )
 
@@ -197,9 +265,12 @@ def main() -> None:
 
     pending_matches = [
         match
-        for match in selected_matches
-        if match["match_id"]
-        not in ingested_match_ids
+        for match
+        in selected_matches
+        if (
+            match["match_id"]
+            not in ingested_match_ids
+        )
     ]
 
     print(
@@ -211,16 +282,26 @@ def main() -> None:
         pending_matches,
         start=1,
     ):
-        match_id = match["match_id"]
+        match_id = (
+            match["match_id"]
+        )
 
-        print("\n" + "#" * 60)
+        print(
+            "\n"
+            + "#"
+            * 60
+        )
 
         print(
             f"Batch match "
-            f"{index}/{len(pending_matches)}"
+            f"{index}/"
+            f"{len(pending_matches)}"
         )
 
-        print("#" * 60)
+        print(
+            "#"
+            * 60
+        )
 
         ingest_match(
             match_id

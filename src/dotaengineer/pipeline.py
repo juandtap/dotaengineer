@@ -15,10 +15,13 @@ from replay_downloader import (
 from replay_parser import (
     build_match_dataframe,
     build_player_match_dataframe,
+    build_player_timeseries_dataframe,
     validate_match,
     validate_player_match,
+    validate_player_timeseries,
     save_match,
     save_player_match,
+    save_player_timeseries,
 )
 
 
@@ -28,6 +31,9 @@ STAGING_REPLAYS_DIR = Path("data/staging/replays")
 
 SILVER_MATCH_DIR = Path("data/silver/match")
 SILVER_PLAYER_MATCH_DIR = Path("data/silver/player_match")
+SILVER_PLAYER_TIMESERIES_DIR = Path(
+    "data/silver/player_timeseries"
+)
 
 
 def ingest_match(match_id: int) -> None:
@@ -172,6 +178,12 @@ def ingest_match(match_id: int) -> None:
         / "part-00000.parquet"
     )
 
+    player_timeseries_silver_path = (
+        SILVER_PLAYER_TIMESERIES_DIR
+        / f"match_id={match_id}"
+        / "part-00000.parquet"
+    )
+
     match_exists = (
         match_silver_path.exists()
     )
@@ -180,20 +192,33 @@ def ingest_match(match_id: int) -> None:
         player_match_silver_path.exists()
     )
 
-    if match_exists and player_match_exists:
+    player_timeseries_exists = (
+        player_timeseries_silver_path.exists()
+    )
+
+    if (
+        match_exists
+        and player_match_exists
+        and player_timeseries_exists
+    ):
         print(
             "\n[4/4] Silver datasets "
             "already exist:"
         )
 
         print(
-            f"match:"
+            f"\nmatch:"
             f"\n{match_silver_path}"
         )
 
         print(
             f"\nplayer_match:"
             f"\n{player_match_silver_path}"
+        )
+
+        print(
+            f"\nplayer_timeseries:"
+            f"\n{player_timeseries_silver_path}"
         )
 
     else:
@@ -217,12 +242,24 @@ def ingest_match(match_id: int) -> None:
             f"{len(parsed_match.players)}"
         )
 
-        match_df = build_match_dataframe(
-            parsed_match
+        match_df = (
+            build_match_dataframe(
+                parsed_match
+            )
         )
 
         player_match_df = (
             build_player_match_dataframe(
+                parsed_match
+            )
+        )
+
+        print(
+            "Building player_timeseries..."
+        )
+
+        player_timeseries_df = (
+            build_player_timeseries_dataframe(
                 parsed_match
             )
         )
@@ -235,9 +272,20 @@ def ingest_match(match_id: int) -> None:
             player_match_df
         )
 
-        match_silver_path = save_match(
-            match_df,
-            match_id,
+        validate_player_timeseries(
+            player_timeseries_df
+        )
+
+        print(
+            f"player_timeseries rows: "
+            f"{len(player_timeseries_df):,}"
+        )
+
+        match_silver_path = (
+            save_match(
+                match_df,
+                match_id,
+            )
         )
 
         player_match_silver_path = (
@@ -247,18 +295,30 @@ def ingest_match(match_id: int) -> None:
             )
         )
 
+        player_timeseries_silver_path = (
+            save_player_timeseries(
+                player_timeseries_df,
+                match_id,
+            )
+        )
+
         print(
             "\nSilver datasets saved:"
         )
 
         print(
-            f"match:"
+            f"\nmatch:"
             f"\n{match_silver_path}"
         )
 
         print(
             f"\nplayer_match:"
             f"\n{player_match_silver_path}"
+        )
+
+        print(
+            f"\nplayer_timeseries:"
+            f"\n{player_timeseries_silver_path}"
         )
 
     # ---------------------------------------------------------
@@ -268,7 +328,8 @@ def ingest_match(match_id: int) -> None:
     print("\n" + "=" * 60)
 
     print(
-        f"Match {match_id} processed successfully."
+        f"Match {match_id} "
+        "processed successfully."
     )
 
     print("=" * 60)
